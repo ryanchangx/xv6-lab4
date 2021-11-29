@@ -37,7 +37,7 @@ int shm_open(int id, char **pointer) {
     // if yes, increase reference count use "mappages" function
     // to add mapping betweeen VA and PA
   struct proc* p = myproc();
-  void* va;
+  char* pa;
   int i;
   int found = 0, allocated = 0;
   acquire(&(shm_table.lock));  // grabbing the lock... should we use uspinlock instead?
@@ -46,10 +46,10 @@ int shm_open(int id, char **pointer) {
       found = 1; allocated = 1;
       // then segment already exists
       ++shm_table.shm_pages[i].refcnt; // increment reference count
-      va = shm_table.shm_pages[i].frame;
-      // use mappages
-      mappages(p->pgdir, (void*)PGROUNDUP(p->sz), PGSIZE, V2P(va), PTE_W|PTE_U);
-      *pointer = (char*)va;
+      pa = shm_table.shm_pages[i].frame;
+      cprintf("old pa=%x, v2p=%x\n", pa, V2P(pa));
+      *pointer = (char*)PGROUNDUP(p->sz);
+      mappages(p->pgdir, *pointer, PGSIZE, V2P(pa), PTE_W|PTE_U);
       break;
     }
   }
@@ -59,11 +59,12 @@ int shm_open(int id, char **pointer) {
       if(shm_table.shm_pages[i].id == 0){  // empty page has id 0
         allocated = 1;
         shm_table.shm_pages[i].id = id;
-        va = shm_table.shm_pages[i].frame = kalloc();
+        shm_table.shm_pages[i].frame = kalloc();
+        pa = shm_table.shm_pages[i].frame;
         shm_table.shm_pages[i].refcnt = 1;
-        cprintf("va=%d\n", va);
-        mappages(p->pgdir, va, PGSIZE, V2P(va), PTE_W|PTE_U);
-        *pointer = (char*)va;
+        cprintf("new pa=%x, v2p=%x\n", pa, V2P(pa));
+        *pointer = (char*)PGROUNDUP(p->sz);
+        mappages(p->pgdir, *pointer, PGSIZE, V2P(pa), PTE_W|PTE_U);
         break;
       }
     }
@@ -74,28 +75,31 @@ int shm_open(int id, char **pointer) {
     // something went REALLY REALLY wrong
     panic("shm_open");
   }
-  return (int)p->pgdir; //added to remove compiler warning -- you should decide what to return
+  p->sz += PGSIZE;
+  return 0; //added to remove compiler warning -- you should decide what to return
     // i dont think it matters what we return because we're not ever directly using that value
 }
 
 
 int shm_close(int id) {
 //you write this too!
-int closed = 0, i;
+  int closed = 0, i;
+  cprintf("closing start\n");
+  acquire(&(shm_table.lock));
   for(i = 0; i < 64; ++i){
     if(shm_table.shm_pages[i].id == id){
       --shm_table.shm_pages[i].refcnt;
       if(!shm_table.shm_pages[i].refcnt){
         shm_table.shm_pages[i].id = 0;
-        shm_table.shm_pages[i].frame = 0;
-        shm_table.shm_pages[i].refcnt = 0;
       }
       closed = 1;
       break;
     }
   }
+  release(&(shm_table.lock));
   if(!closed){ // we couldn't find that id in the shm_table
     panic("shm_close");
   }
+  cprintf("closing done\n");
   return 0; //added to remove compiler warning -- you should decide what to return
 }
