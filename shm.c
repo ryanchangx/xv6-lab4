@@ -37,7 +37,7 @@ int shm_open(int id, char **pointer) {
     // if yes, increase reference count use "mappages" function
     // to add mapping betweeen VA and PA
   struct proc* p = myproc();
-  char* pa;
+  void* pa;
   int i;
   int found = 0, allocated = 0;
   acquire(&(shm_table.lock));  // grabbing the lock... should we use uspinlock instead?
@@ -47,13 +47,14 @@ int shm_open(int id, char **pointer) {
       // then segment already exists
       ++shm_table.shm_pages[i].refcnt; // increment reference count
       pa = shm_table.shm_pages[i].frame;
-      cprintf("old pa=%x, v2p=%x\n", pa, V2P(pa));
+      // cprintf("old pa=%x, v2p=%x\n", pa, V2P(pa));
       *pointer = (char*)PGROUNDUP(p->sz);
       mappages(p->pgdir, *pointer, PGSIZE, V2P(pa), PTE_W|PTE_U);
       break;
     }
   }
   // if we made it here then we need to allocate a new page
+  //base address?
   if(!found){
     for(i = 0; i < 64; ++i){
       if(shm_table.shm_pages[i].id == 0){  // empty page has id 0
@@ -62,8 +63,9 @@ int shm_open(int id, char **pointer) {
         shm_table.shm_pages[i].frame = kalloc();
         pa = shm_table.shm_pages[i].frame;
         shm_table.shm_pages[i].refcnt = 1;
-        cprintf("new pa=%x, v2p=%x\n", pa, V2P(pa));
+        // cprintf("new pa=%x, v2p=%x\n", pa, V2P(pa));
         *pointer = (char*)PGROUNDUP(p->sz);
+        memset(pa, 0, PGSIZE);
         mappages(p->pgdir, *pointer, PGSIZE, V2P(pa), PTE_W|PTE_U);
         break;
       }
@@ -84,7 +86,6 @@ int shm_open(int id, char **pointer) {
 int shm_close(int id) {
 //you write this too!
   int closed = 0, i;
-  cprintf("closing start\n");
   acquire(&(shm_table.lock));
   for(i = 0; i < 64; ++i){
     if(shm_table.shm_pages[i].id == id){
@@ -100,6 +101,5 @@ int shm_close(int id) {
   if(!closed){ // we couldn't find that id in the shm_table
     panic("shm_close");
   }
-  cprintf("closing done\n");
   return 0; //added to remove compiler warning -- you should decide what to return
 }
