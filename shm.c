@@ -71,13 +71,14 @@ int shm_open(int id, char **pointer) {
       }
     }
   }
+  p->sz += PGSIZE;
   release(&(shm_table.lock));
   // since pointer is the virtual address, just set the pointer to point to VA
   if(!allocated){
     // something went REALLY REALLY wrong
     panic("shm_open");
   }
-  p->sz += PGSIZE;
+  
   return 0; //added to remove compiler warning -- you should decide what to return
     // i dont think it matters what we return because we're not ever directly using that value
 }
